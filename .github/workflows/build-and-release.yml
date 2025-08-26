@@ -1,0 +1,63 @@
+name: .NET
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    - name: Extract version from main.cs
+      id: get_version
+      run: |
+        VERSION=$(grep -oP 'ModuleVersion => "\K[^"]+' main.cs)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION"
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    - name: Publish
+      run: dotnet publish --no-build --configuration Release --output ./tmp
+    - name: Clean unnecessary files
+      run: |
+        rm -f ./tmp/CounterStrikeSharp.API.dll
+        rm -f ./tmp/McMaster.NETCore.Plugins.dll
+        rm -f ./tmp/Microsoft.DotNet.PlatformAbstractions.dll
+        rm -f ./tmp/Microsoft.Extensions.DependencyModel.dll
+        rm -f ./tmp/Microsoft.*
+        rm -f ./tmp/Scrutor.*
+        rm -f ./tmp/Serilog.*
+        rm -f ./tmp/System.Diagnostics.EventLog.*
+        rm -f ./tmp/Tomlyn.*
+        rm -rf ./tmp/runtimes
+    - name: Create plugin structure
+      run: |
+        mkdir -p ./addons/counterstrikesharp/plugins/SmartAutoRestart
+        cp -r ./tmp/* ./addons/counterstrikesharp/plugins/SmartAutoRestart/
+    - name: Create archive
+      uses: thedoctor0/zip-release@0.7.6
+      with:
+        type: 'zip'
+        filename: 'SmartAutoRestart.zip'
+        path: ./addons
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: v${{ steps.get_version.outputs.version }}
+        name: CS2-SmartAutoRestart - v${{ steps.get_version.outputs.version }}
+        artifacts: SmartAutoRestart.zip
+        body: |
+          ${{ github.event.head_commit.message }}
+          
+          Place files in game/csgo
+        token: ${{ secrets.GITHUB_TOKEN }}
